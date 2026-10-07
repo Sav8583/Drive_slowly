@@ -2,333 +2,36 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Minimalist Highway Drive</title>
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      user-select: none;
-    }
-    body {
-      overflow: hidden;
-      background: #7ca8d9;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      display: block;
-    }
-    #ui {
-      position: absolute;
-      bottom: 24px;
-      left: 24px;
-      color: #ffffff;
-      text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-      pointer-events: none;
-      font-weight: 500;
-      line-height: 1.5;
-    }
-    .speed {
-      font-size: 2.2rem;
-      font-weight: 700;
-      letter-spacing: -1px;
-    }
-    .keys {
-      font-size: 0.85rem;
-      opacity: 0.8;
-      margin-top: 4px;
-    }
-  </style>
-  <!-- Three.js CDN -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Endless Open Highway</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Three.js and Perlin Noise library via CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/simplex-noise@2.4.0/simplex-noise.min.js"></script>
 </head>
 <body>
-  <div id="ui">
-    <div class="speed"><span id="speedVal">0</span> <small style="font-size: 1rem;">km/h</small></div>
-    <div class="keys">W / ↑ : Accelerate &bull; S / ↓ : Reverse/Brake &bull; A, D / ←, → : Steer</div>
+  <!-- HUD / Dashboard -->
+  <div id="hud">
+    <div class="speed-cluster">
+      <span id="speedVal">0</span>
+      <span class="unit">KM/H</span>
+    </div>
+    <div class="gear-indicator" id="gearVal">D</div>
+    <div class="keys-tip">WASD / Arrows to Drive &bull; C: Change View &bull; Space: Handbrake</div>
   </div>
 
-  <script>
-    // --- SCENE SETUP ---
-    const scene = new THREE.Scene();
-    const skyColor = 0x82b2e8;
-    const fogColor = 0xcfe2f5;
-    scene.background = new THREE.Color(skyColor);
-    scene.fog = new THREE.FogExp2(fogColor, 0.0055);
+  <!-- On-Screen Touch / Click Controls for Mobile & Laptop -->
+  <div id="mobile-controls">
+    <div class="control-dpad">
+      <button class="btn" id="btn-left">◀</button>
+      <button class="btn" id="btn-right">▶</button>
+    </div>
+    <div class="control-pedals">
+      <button class="btn pedal brake" id="btn-brake">BRAKE</button>
+      <button class="btn pedal gas" id="btn-gas">GAS</button>
+    </div>
+  </div>
 
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    document.body.appendChild(renderer.domElement);
-
-    // --- LIGHTS ---
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x5a7a50, 0.7);
-    scene.add(hemiLight);
-
-    const sun = new THREE.DirectionalLight(0xfffaed, 0.9);
-    sun.position.set(100, 150, -80);
-    sun.castShadow = true;
-    sun.shadow.mapSize.width = 2048;
-    sun.shadow.mapSize.height = 2048;
-    sun.shadow.camera.near = 10;
-    sun.shadow.camera.far = 400;
-    const d = 80;
-    sun.shadow.camera.left = -d;
-    sun.shadow.camera.right = d;
-    sun.shadow.camera.top = d;
-    sun.shadow.camera.bottom = -d;
-    scene.add(sun);
-
-    // --- ROAD CURVE MATHEMATICS ---
-    // Smooth sinusoidal curves creating endless organic rolling highway
-    function getRoadCenter(z) {
-      const x = Math.sin(z * 0.008) * 45 + Math.sin(z * 0.002) * 120;
-      const y = Math.cos(z * 0.005) * 12 + Math.sin(z * 0.015) * 4;
-      return { x, y };
-    }
-
-    // --- PROCEDURAL TERRAIN & ROAD CHUNKS ---
-    const ROAD_WIDTH = 10;
-    const CHUNK_LENGTH = 300;
-    const CHUNKS_COUNT = 4;
-    const chunks = [];
-
-    const groundMat = new THREE.MeshLambertMaterial({ color: 0x6e9651 });
-    const roadMat = new THREE.MeshLambertMaterial({ color: 0x2f343b });
-    const lineMat = new THREE.MeshBasicMaterial({ color: 0xf3f3f3 });
-
-    function createChunk(startZ) {
-      const group = new THREE.Group();
-      const segments = 60;
-      const segLen = CHUNK_LENGTH / segments;
-
-      // 1. Terrain Mesh
-      const terrainGeo = new THREE.PlaneGeometry(350, CHUNK_LENGTH, 30, segments);
-      terrainGeo.rotateX(-Math.PI / 2);
-      const pos = terrainGeo.attributes.position;
-      
-      for (let i = 0; i < pos.count; i++) {
-        const vx = pos.getX(i);
-        const vz = pos.getZ(i);
-        const globalZ = startZ - (vz + CHUNK_LENGTH / 2);
-        const roadPt = getRoadCenter(globalZ);
-        
-        // Flatten terrain where the road cuts through
-        const distFromRoad = Math.abs(vx - roadPt.x);
-        const roadBlend = Math.min(Math.max((distFromRoad - ROAD_WIDTH * 0.8) / 30, 0), 1);
-        const naturalHills = Math.sin(globalZ * 0.01) * Math.cos(vx * 0.02) * 18;
-        const finalY = roadPt.y * (1 - roadBlend) + naturalHills * roadBlend - 0.2;
-        pos.setY(i, finalY);
-      }
-      terrainGeo.computeVertexNormals();
-      const terrain = new THREE.Mesh(terrainGeo, groundMat);
-      terrain.position.set(0, 0, startZ - CHUNK_LENGTH / 2);
-      terrain.receiveShadow = true;
-      group.add(terrain);
-
-      // 2. Road Surface & Center Stripe
-      const roadGeo = new THREE.PlaneGeometry(ROAD_WIDTH, CHUNK_LENGTH, 1, segments);
-      roadGeo.rotateX(-Math.PI / 2);
-      const rPos = roadGeo.attributes.position;
-
-      for (let i = 0; i < rPos.count; i++) {
-        const side = rPos.getX(i) > 0 ? 1 : -1;
-        const vz = rPos.getZ(i);
-        const globalZ = startZ - (vz + CHUNK_LENGTH / 2);
-        const roadPt = getRoadCenter(globalZ);
-        rPos.setX(i, roadPt.x + side * (ROAD_WIDTH / 2));
-        rPos.setY(i, roadPt.y + 0.05); // slight elevation to prevent z-fighting
-      }
-      roadGeo.computeVertexNormals();
-      const road = new THREE.Mesh(roadGeo, roadMat);
-      road.position.set(0, 0, startZ - CHUNK_LENGTH / 2);
-      road.receiveShadow = true;
-      group.add(road);
-
-      // 3. Center Line Dashes
-      const lineGeo = new THREE.PlaneGeometry(0.3, CHUNK_LENGTH, 1, segments);
-      lineGeo.rotateX(-Math.PI / 2);
-      const lPos = lineGeo.attributes.position;
-      for (let i = 0; i < lPos.count; i++) {
-        const vz = lPos.getZ(i);
-        const globalZ = startZ - (vz + CHUNK_LENGTH / 2);
-        const roadPt = getRoadCenter(globalZ);
-        lPos.setX(i, roadPt.x);
-        lPos.setY(i, roadPt.y + 0.08);
-      }
-      lineGeo.computeVertexNormals();
-      const centerLine = new THREE.Mesh(lineGeo, lineMat);
-      centerLine.position.set(0, 0, startZ - CHUNK_LENGTH / 2);
-      group.add(centerLine);
-
-      scene.add(group);
-      return { group, startZ, endZ: startZ - CHUNK_LENGTH };
-    }
-
-    // Build initial world chunks
-    let currentChunkZ = 50;
-    for (let i = 0; i < CHUNKS_COUNT; i++) {
-      chunks.push(createChunk(currentChunkZ));
-      currentChunkZ -= CHUNK_LENGTH;
-    }
-
-    // --- CAR MODEL ---
-    const car = new THREE.Group();
-    const carBodyMat = new THREE.MeshStandardMaterial({
-      color: 0xdf3529,
-      roughness: 0.25,
-      metalness: 0.35,
-    });
-    const glassMat = new THREE.MeshStandardMaterial({
-      color: 0x1f2730,
-      roughness: 0.1,
-      metalness: 0.9,
-    });
-    const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
-
-    // Chassis Lower Base
-    const chassisGeo = new THREE.BoxGeometry(2.0, 0.65, 4.4);
-    const chassis = new THREE.Mesh(chassisGeo, carBodyMat);
-    chassis.position.y = 0.55;
-    chassis.castShadow = true;
-    car.add(chassis);
-
-    // Cabin Glass / Roof
-    const cabinGeo = new THREE.BoxGeometry(1.65, 0.6, 2.3);
-    const cabin = new THREE.Mesh(cabinGeo, glassMat);
-    cabin.position.set(0, 1.05, -0.2);
-    cabin.castShadow = true;
-    car.add(cabin);
-
-    // Wheels
-    const wheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.35, 16);
-    wheelGeo.rotateZ(Math.PI / 2);
-    const wheelPositions = [
-      [-1.0, 0.38, 1.3],
-      [1.0, 0.38, 1.3],
-      [-1.0, 0.38, -1.3],
-      [1.0, 0.38, -1.3]
-    ];
-    wheelPositions.forEach(([x, y, z]) => {
-      const wheel = new THREE.Mesh(wheelGeo, wheelMat);
-      wheel.position.set(x, y, z);
-      wheel.castShadow = true;
-      car.add(wheel);
-    });
-
-    scene.add(car);
-
-    // --- VEHICLE CONTROLS & PHYSICS STATE ---
-    const keys = { forward: false, backward: false, left: false, right: false };
-    window.addEventListener("keydown", (e) => {
-      if (e.key === "w" || e.key === "ArrowUp") keys.forward = true;
-      if (e.key === "s" || e.key === "ArrowDown") keys.backward = true;
-      if (e.key === "a" || e.key === "ArrowLeft") keys.left = true;
-      if (e.key === "d" || e.key === "ArrowRight") keys.right = true;
-    });
-    window.addEventListener("keyup", (e) => {
-      if (e.key === "w" || e.key === "ArrowUp") keys.forward = false;
-      if (e.key === "s" || e.key === "ArrowDown") keys.backward = false;
-      if (e.key === "a" || e.key === "ArrowLeft") keys.left = false;
-      if (e.key === "d" || e.key === "ArrowRight") keys.right = false;
-    });
-
-    let speed = 0;
-    const MAX_SPEED = 1.35;
-    const ACCEL = 0.015;
-    const BRAKE = 0.025;
-    const FRICTION = 0.988;
-    let heading = Math.PI; // Heading forward along negative Z
-
-    const speedUI = document.getElementById("speedVal");
-
-    // --- GAME LOOP ---
-    function animate() {
-      requestAnimationFrame(animate);
-
-      // Handle Acceleration & Deceleration
-      if (keys.forward) speed += ACCEL;
-      else if (keys.backward) speed -= BRAKE;
-      else speed *= FRICTION;
-
-      speed = Math.max(-MAX_SPEED * 0.35, Math.min(MAX_SPEED, speed));
-
-      // Handle Steering
-      if (Math.abs(speed) > 0.005) {
-        const steerDir = speed > 0 ? 1 : -1;
-        if (keys.left) heading += 0.024 * steerDir;
-        if (keys.right) heading -= 0.024 * steerDir;
-      }
-
-      // Move Car Body
-      car.position.x += Math.sin(heading) * speed;
-      car.position.z += Math.cos(heading) * speed;
-
-      // Adjust height and tilt to road slope
-      const curRoad = getRoadCenter(car.position.z);
-      const nextRoad = getRoadCenter(car.position.z - 2);
-      const pitch = (nextRoad.y - curRoad.y) * 0.4;
-      car.position.y = curRoad.y + 0.1;
-
-      // Apply body roll/tilt while steering
-      const roll = keys.left ? 0.035 : (keys.right ? -0.035 : 0);
-      car.rotation.set(-pitch, heading, roll);
-
-      // Update Camera (Third-person chase)
-      const camTargetPos = new THREE.Vector3(
-        car.position.x - Math.sin(heading) * 11,
-        car.position.y + 4.2,
-        car.position.z - Math.cos(heading) * 11
-      );
-      camera.position.lerp(camTargetPos, 0.12);
-      camera.lookAt(
-        car.position.x,
-        car.position.y + 1.2,
-        car.position.z + Math.cos(heading) * 4
-      );
-
-      // Keep light source near the vehicle for accurate real-time shadows
-      sun.position.set(car.position.x + 80, car.position.y + 140, car.position.z - 60);
-      sun.target = car;
-
-      // Endless Road Chunk Recycling
-      chunks.forEach((chunk) => {
-        if (car.position.z < chunk.endZ - 40) {
-          // Move chunk to the front of the queue
-          const lastZ = chunks.reduce((min, c) => Math.min(min, c.endZ), Infinity);
-          scene.remove(chunk.group);
-          chunk.group.geometry?.dispose();
-
-          const newChunk = createChunk(lastZ);
-          chunk.group = newChunk.group;
-          chunk.startZ = newChunk.startZ;
-          chunk.endZ = newChunk.endZ;
-        }
-      });
-
-      // Update speedometer (arbitrary realistic scaling)
-      speedUI.innerText = Math.round(Math.abs(speed) * 105);
-
-      renderer.render(scene, camera);
-    }
-
-    animate();
-
-    // --- RESPONSIVE RESIZE ---
-    window.addEventListener("resize", () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-  </script>
+  <script src="game.js"></script>
 </body>
 </html>
