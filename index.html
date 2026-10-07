@@ -3,21 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Island Circuit Drive</title>
+  <title>Night Jungle Highway</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
+  <!-- HUD Dashboard -->
   <div id="hud">
     <div class="speed-box">
       <span id="speedVal">0</span>
       <span class="unit">KM/H</span>
     </div>
     <div class="sub-info">
-      <span id="gearVal">D</span> &bull; <span id="surfaceVal">TARMAC</span>
+      <span id="vehicleLabel">VEHICLE: CAR</span>
     </div>
+    <button id="btn-switch-vehicle" class="action-btn">SWITCH TO BIKE (V)</button>
   </div>
 
+  <!-- On-Screen Controls for Mobile / Touch -->
   <div id="touch-controls">
     <div class="btn-group left-group">
       <button class="btn touch-btn" id="btn-left">◀</button>
