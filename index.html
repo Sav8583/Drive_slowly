@@ -3,24 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Night Jungle Highway</title>
+  <title>Night Jungle Drive</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-  <!-- HUD Dashboard -->
+  <!-- HUD -->
   <div id="hud">
-    <div class="speed-box">
+    <div class="speed-cluster">
       <span id="speedVal">0</span>
       <span class="unit">KM/H</span>
     </div>
     <div class="sub-info">
-      <span id="vehicleLabel">VEHICLE: CAR</span>
+      <span id="gearVal">D</span> &bull; <span id="vehName">RED CAR</span>
     </div>
-    <button id="btn-switch-vehicle" class="action-btn">SWITCH TO BIKE (V)</button>
+    <button id="btn-switch" class="switch-btn">🔄 SWITCH VEHICLE (V)</button>
   </div>
 
-  <!-- On-Screen Controls for Mobile / Touch -->
+  <!-- Touch Controls -->
   <div id="touch-controls">
     <div class="btn-group left-group">
       <button class="btn touch-btn" id="btn-left">◀</button>
