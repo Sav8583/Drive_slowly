@@ -11,7 +11,7 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: #8bb3e0;
+  background-color: #050b14;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -26,37 +26,54 @@ canvas {
 
 #hud {
   position: absolute;
-  top: 24px;
-  left: 24px;
+  top: 20px;
+  left: 20px;
   color: #fff;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
-  pointer-events: none;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  pointer-events: auto;
   z-index: 10;
 }
 
-.speed-box {
+.speed-cluster {
   display: flex;
   align-items: baseline;
   gap: 8px;
 }
 
 #speedVal {
-  font-size: 3.6rem;
+  font-size: 3.4rem;
   font-weight: 800;
   letter-spacing: -2px;
 }
 
 .unit {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
-  opacity: 0.85;
+  opacity: 0.8;
 }
 
 .sub-info {
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: 1px;
-  color: #ffd166;
+  color: #64b5f6;
+  margin-top: -4px;
+  margin-bottom: 12px;
+}
+
+.switch-btn {
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+.switch-btn:active {
+  background: rgba(255, 255, 255, 0.4);
 }
 
 #touch-controls {
@@ -79,23 +96,22 @@ canvas {
 }
 
 .btn {
-  background: rgba(255, 255, 255, 0.28);
-  border: 1.5px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.2);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   color: #fff;
   border-radius: 50%;
   width: 68px;
   height: 68px;
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   font-weight: bold;
   cursor: pointer;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
-  transition: transform 0.05s ease, background 0.08s ease;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
 }
 
 .btn:active, .btn.pressed {
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.5);
   transform: scale(0.92);
 }
 
@@ -103,21 +119,21 @@ canvas {
   border-radius: 18px;
   width: 76px;
   height: 96px;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   font-weight: 800;
   letter-spacing: 1px;
 }
 
 .pedal-btn.gas {
-  background: rgba(46, 204, 113, 0.45);
+  background: rgba(46, 204, 113, 0.4);
 }
 .pedal-btn.gas:active, .pedal-btn.gas.pressed {
-  background: rgba(46, 204, 113, 0.85);
+  background: rgba(46, 204, 113, 0.8);
 }
 
 .pedal-btn.brake {
-  background: rgba(231, 76, 60, 0.45);
+  background: rgba(231, 76, 60, 0.4);
 }
 .pedal-btn.brake:active, .pedal-btn.brake.pressed {
-  background: rgba(231, 76, 60, 0.85);
+  background: rgba(231, 76, 60, 0.8);
 }
