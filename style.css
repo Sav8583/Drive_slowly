@@ -1,0 +1,128 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+body, html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #92bce3;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+canvas {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+}
+
+#hud {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  color: #ffffff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.speed-cluster {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+#speedVal {
+  font-size: 3.5rem;
+  font-weight: 800;
+  letter-spacing: -2px;
+}
+
+.unit {
+  font-size: 1.1rem;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.gear-indicator {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #ffcc00;
+  margin-top: -4px;
+}
+
+.keys-tip {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin-top: 8px;
+}
+
+/* On-screen controls for touch screens and mice */
+#mobile-controls {
+  position: absolute;
+  bottom: 24px;
+  left: 0;
+  width: 100%;
+  padding: 0 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.control-dpad, .control-pedals {
+  display: flex;
+  gap: 14px;
+  pointer-events: auto;
+}
+
+.btn {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+  border-radius: 50%;
+  width: 64px;
+  height: 64px;
+  font-size: 1.3rem;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transition: transform 0.05s ease, background 0.1s ease;
+  touch-action: manipulation;
+}
+
+.btn:active, .btn.pressed {
+  background: rgba(255, 255, 255, 0.55);
+  transform: scale(0.92);
+}
+
+.pedal {
+  border-radius: 16px;
+  width: 72px;
+  height: 90px;
+  font-size: 0.85rem;
+  letter-spacing: 1px;
+}
+
+.pedal.gas {
+  background: rgba(80, 200, 120, 0.4);
+}
+.pedal.gas:active, .pedal.gas.pressed {
+  background: rgba(80, 200, 120, 0.7);
+}
+
+.pedal.brake {
+  background: rgba(220, 60, 60, 0.4);
+}
+.pedal.brake:active, .pedal.brake.pressed {
+  background: rgba(220, 60, 60, 0.7);
+}
