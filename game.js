@@ -1,450 +1,417 @@
-// --- RENDERER & SCENE SETUP ---
+// --- SCENE & NIGHT ATMOSPHERE ---
 const scene = new THREE.Scene();
-const skyColor = 0x8ec5fc;
-const fogColor = 0xc2ddfa;
+const nightSky = 0x050a14;
+const nightFog = 0x07111e;
 
-scene.background = new THREE.Color(skyColor);
-scene.fog = new THREE.FogExp2(fogColor, 0.0016);
+scene.background = new THREE.Color(nightSky);
+scene.fog = new THREE.FogExp2(nightFog, 0.0035);
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.2, 3500);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.2, 2000);
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+// ACES Tone Mapping + High Exposure mimics night photography with specular light bounce
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.2;
+renderer.toneMappingExposure = 1.35;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
-// --- LIGHTING ---
-const hemiLight = new THREE.HemisphereLight(0xffffff, 0x476839, 0.85);
-scene.add(hemiLight);
+// --- NIGHT LIGHTING (MOONLIGHT & AMBIENCE) ---
+const ambientLight = new THREE.HemisphereLight(0x38557d, 0x0d1f11, 0.35);
+scene.add(ambientLight);
 
-const sun = new THREE.DirectionalLight(0xfffae8, 1.45);
-sun.position.set(280, 420, -180);
-sun.castShadow = true;
-sun.shadow.mapSize.width = 2048;
-sun.shadow.mapSize.height = 2048;
-sun.shadow.camera.near = 50;
-sun.shadow.camera.far = 800;
-const d = 160;
-sun.shadow.camera.left = -d;
-sun.shadow.camera.right = d;
-sun.shadow.camera.top = d;
-sun.shadow.camera.bottom = -d;
-scene.add(sun);
+// 3D Luminous Moon in the Sky
+const moonMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(18, 24, 24),
+  new THREE.MeshBasicMaterial({ color: 0xf5f8ff })
+);
+moonMesh.position.set(300, 380, -400);
+scene.add(moonMesh);
 
-// --- INFINITE WATER HORIZON (ELIMINATES VOIDS) ---
-const oceanGeo = new THREE.PlaneGeometry(5000, 5000);
-const oceanMat = new THREE.MeshStandardMaterial({
-  color: 0x3d7ebd,
-  roughness: 0.15,
-  metalness: 0.8
+// Directional Moonlight
+const moonLight = new THREE.DirectionalLight(0xa6c8ff, 0.65);
+moonLight.position.copy(moonMesh.position);
+moonLight.castShadow = true;
+moonLight.shadow.mapSize.width = 2048;
+moonLight.shadow.mapSize.height = 2048;
+moonLight.shadow.camera.near = 100;
+moonLight.shadow.camera.far = 900;
+const d = 250;
+moonLight.shadow.camera.left = -d;
+moonLight.shadow.camera.right = d;
+moonLight.shadow.camera.top = d;
+moonLight.shadow.camera.bottom = -d;
+scene.add(moonLight);
+
+// --- FLAT DARK GREEN JUNGLE TERRAIN ---
+const groundGeo = new THREE.PlaneGeometry(2400, 2400);
+groundGeo.rotateX(-Math.PI / 2);
+const groundMat = new THREE.MeshStandardMaterial({
+  color: 0x122613, // Dark forest jungle floor
+  roughness: 0.95,
+  metalness: 0.05
 });
-const ocean = new THREE.Mesh(oceanGeo, oceanMat);
-ocean.rotation.x = -Math.PI / 2;
-ocean.position.y = -1.5;
-scene.add(ocean);
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.position.y = 0;
+ground.receiveShadow = true;
+scene.add(ground);
 
-// --- PROCEDURAL ISLAND & CONTINUOUS LOOP CIRCUIT ---
-const ISLAND_SIZE = 1200;
-const SEGMENTS = 140;
-const terrainGeo = new THREE.PlaneGeometry(ISLAND_SIZE, ISLAND_SIZE, SEGMENTS, SEGMENTS);
-terrainGeo.rotateX(-Math.PI / 2);
+// --- CLOSED CIRCULAR JUNGLE HIGHWAY ---
+const ROAD_STEPS = 650;
+const ROAD_WIDTH = 13;
+const trackPoints = [];
 
-// Mathematical circular ring road with winding lobes
-function getTrackCenter(t) {
-  // t is 0.0 to 1.0 (looping angle)
+// Closed circular loop with wide, gentle bends
+function getTrackPos(t) {
   const angle = t * Math.PI * 2;
-  const radius = 320 + Math.sin(angle * 3) * 65 + Math.cos(angle * 5) * 35;
+  const radius = 340 + Math.sin(angle * 3) * 60 + Math.cos(angle * 2) * 40;
   const x = Math.cos(angle) * radius;
   const z = Math.sin(angle) * radius;
-  const y = 8 + Math.sin(angle * 2) * 9 + Math.cos(angle * 6) * 4;
-  return new THREE.Vector3(x, y, z);
+  return new THREE.Vector3(x, 0.05, z); // Pure flat highway
 }
 
-// Terrain elevation function matching track & hills
-function getIslandElevation(x, z) {
-  const distFromCenter = Math.sqrt(x * x + z * z);
-  if (distFromCenter > 580) return -2.0; // drops into water
-
-  // Find nearest track point
-  const angle = Math.atan2(z, x);
-  let t = angle / (Math.PI * 2);
-  if (t < 0) t += 1.0;
-  const trackPt = getTrackCenter(t);
-  const distToTrack = Math.hypot(x - trackPt.x, z - trackPt.z);
-
-  // Flatten for the road bed
-  const roadWidth = 14;
-  const blend = Math.min(Math.max((distToTrack - roadWidth * 0.7) / 40, 0), 1);
-  const naturalHills =
-    Math.sin(x * 0.015) * Math.cos(z * 0.015) * 18 +
-    Math.sin(x * 0.035 + z * 0.02) * 6;
-
-  const islandDome = Math.cos((distFromCenter / 580) * (Math.PI / 2)) * 14;
-  const baseTerrain = islandDome + naturalHills;
-
-  return trackPt.y * (1 - blend) + baseTerrain * blend;
-}
-
-// Displace terrain vertices
-const tPos = terrainGeo.attributes.position;
-for (let i = 0; i < tPos.count; i++) {
-  const vx = tPos.getX(i);
-  const vz = tPos.getZ(i);
-  tPos.setY(i, getIslandElevation(vx, vz));
-}
-terrainGeo.computeVertexNormals();
-
-const terrainMat = new THREE.MeshStandardMaterial({
-  color: 0x5a8644,
-  roughness: 0.9,
-  metalness: 0.05,
-  flatShading: true
-});
-const terrain = new THREE.Mesh(terrainGeo, terrainMat);
-terrain.receiveShadow = true;
-scene.add(terrain);
-
-// --- CONSTRUCT THE CONTINUOUS ROAD MESH ---
-const ROAD_STEPS = 600;
-const ROAD_WIDTH = 13;
-const roadPts = [];
 for (let i = 0; i <= ROAD_STEPS; i++) {
   const t = i / ROAD_STEPS;
-  roadPts.push(getTrackCenter(t === 1.0 ? 0.0 : t));
+  trackPoints.push(getTrackPos(t === 1.0 ? 0.0 : t));
 }
 
-const roadGeo = new THREE.BufferGeometry();
+// Build Road Geometry
 const roadVerts = [];
-const roadUvs = [];
 const roadIndices = [];
-
 for (let i = 0; i < ROAD_STEPS; i++) {
-  const p1 = roadPts[i];
-  const p2 = roadPts[(i + 1) % ROAD_STEPS];
-
+  const p1 = trackPoints[i];
+  const p2 = trackPoints[(i + 1) % ROAD_STEPS];
   const forward = new THREE.Vector3().subVectors(p2, p1).normalize();
   const up = new THREE.Vector3(0, 1, 0);
   const right = new THREE.Vector3().crossVectors(forward, up).normalize().multiplyScalar(ROAD_WIDTH / 2);
 
   roadVerts.push(
-    p1.x - right.x, p1.y + 0.12, p1.z - right.z,
-    p1.x + right.x, p1.y + 0.12, p1.z + right.z
+    p1.x - right.x, 0.08, p1.z - right.z,
+    p1.x + right.x, 0.08, p1.z + right.z
   );
 
-  const vIdx = i * 2;
-  const nextVIdx = ((i + 1) % ROAD_STEPS) * 2;
-  roadIndices.push(vIdx, vIdx + 1, nextVIdx);
-  roadIndices.push(vIdx + 1, nextVIdx + 1, nextVIdx);
+  const idx = i * 2;
+  const nextIdx = ((i + 1) % ROAD_STEPS) * 2;
+  roadIndices.push(idx, idx + 1, nextIdx);
+  roadIndices.push(idx + 1, nextIdx + 1, nextIdx);
 }
 
+const roadGeo = new THREE.BufferGeometry();
 roadGeo.setAttribute("position", new THREE.Float32BufferAttribute(roadVerts, 3));
 roadGeo.setIndex(roadIndices);
 roadGeo.computeVertexNormals();
 
+// Wet, reflective asphalt (High specular shine under torches & moonlight)
 const roadMat = new THREE.MeshStandardMaterial({
-  color: 0x22262a,
-  roughness: 0.7,
-  metalness: 0.1
+  color: 0x181a1d,
+  roughness: 0.28,
+  metalness: 0.65
 });
 const roadMesh = new THREE.Mesh(roadGeo, roadMat);
 roadMesh.receiveShadow = true;
 scene.add(roadMesh);
 
-// Center road line
-const lineGeo = new THREE.BufferGeometry();
+// Dashed Center Road Line
 const lineVerts = [];
 for (let i = 0; i < ROAD_STEPS; i++) {
-  const p = roadPts[i];
-  lineVerts.push(p.x, p.y + 0.18, p.z);
+  const p = trackPoints[i];
+  lineVerts.push(p.x, 0.12, p.z);
 }
-lineVerts.push(roadPts[0].x, roadPts[0].y + 0.18, roadPts[0].z);
+lineVerts.push(trackPoints[0].x, 0.12, trackPoints[0].z);
+const lineGeo = new THREE.BufferGeometry();
 lineGeo.setAttribute("position", new THREE.Float32BufferAttribute(lineVerts, 3));
 const lineMat = new THREE.LineDashedMaterial({
   color: 0xffffff,
-  dashSize: 3.5,
-  gapSize: 2.5,
-  linewidth: 2
+  dashSize: 3,
+  gapSize: 2.5
 });
 const centerLine = new THREE.Line(lineGeo, lineMat);
 centerLine.computeLineDistances();
 scene.add(centerLine);
 
-// --- SCENERY: PROCEDURAL LOW-POLY TREES ---
+// --- DENSE DARK JUNGLE TREES ---
 const treeGroup = new THREE.Group();
-const trunkMat = new THREE.MeshLambertMaterial({ color: 0x402b1c });
-const leavesMat = new THREE.MeshLambertMaterial({ color: 0x3b6932, flatShading: true });
-const trunkGeo = new THREE.CylinderGeometry(0.3, 0.5, 3.2, 5);
-const leavesGeo = new THREE.ConeGeometry(2.4, 5.5, 5);
+const trunkMat = new THREE.MeshLambertMaterial({ color: 0x1f140b });
+const jungleLeavesMat = new THREE.MeshStandardMaterial({
+  color: 0x0c2912,
+  roughness: 0.8,
+  metalness: 0.1,
+  flatShading: true
+});
+const trunkGeo = new THREE.CylinderGeometry(0.35, 0.55, 4, 5);
+const leavesGeo = new THREE.ConeGeometry(2.5, 6.5, 5);
 
-for (let i = 0; i < 280; i++) {
+for (let i = 0; i < 400; i++) {
   const angle = Math.random() * Math.PI * 2;
-  const radius = 90 + Math.random() * 460;
+  const radius = 80 + Math.random() * 520;
   const tx = Math.cos(angle) * radius;
   const tz = Math.sin(angle) * radius;
 
-  // Don't spawn trees on the road
+  // Don't spawn trees on the asphalt
   let t = angle / (Math.PI * 2);
   if (t < 0) t += 1.0;
-  const rPt = getTrackCenter(t);
-  if (Math.hypot(tx - rPt.x, tz - rPt.z) < 14) continue;
-
-  const ty = getIslandElevation(tx, tz);
-  if (ty < 1.0) continue; // above water
+  const roadPos = getTrackPos(t);
+  if (Math.hypot(tx - roadPos.x, tz - roadPos.z) < 13) continue;
 
   const tree = new THREE.Group();
   const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-  trunk.position.y = 1.6;
+  trunk.position.y = 2.0;
   trunk.castShadow = true;
   tree.add(trunk);
 
-  const foliage = new THREE.Mesh(leavesGeo, leavesMat);
-  foliage.position.y = 4.6;
+  const foliage = new THREE.Mesh(leavesGeo, jungleLeavesMat);
+  foliage.position.y = 5.2;
   foliage.castShadow = true;
   tree.add(foliage);
 
-  tree.position.set(tx, ty, tz);
-  const s = 0.7 + Math.random() * 0.6;
+  tree.position.set(tx, 0, tz);
+  const s = 0.8 + Math.random() * 0.7;
   tree.scale.set(s, s, s);
   treeGroup.add(tree);
 }
 scene.add(treeGroup);
 
-// --- HIGH-ACCURACY CAR MODEL ---
+// --- VEHICLE 1: RED SPORTS CAR ---
 const car = new THREE.Group();
+const carPaint = new THREE.MeshStandardMaterial({ color: 0xcc181e, roughness: 0.2, metalness: 0.6 });
+const glassMat = new THREE.MeshStandardMaterial({ color: 0x080c12, roughness: 0.1, metalness: 0.9 });
+const blackMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
 
-// Sports car body with bevelled aerodynamic frame
-const carBodyMat = new THREE.MeshStandardMaterial({
-  color: 0xd62828,
-  roughness: 0.18,
-  metalness: 0.55
-});
-const blackPlasticMat = new THREE.MeshStandardMaterial({
-  color: 0x141414,
-  roughness: 0.7
-});
-const glassMat = new THREE.MeshStandardMaterial({
-  color: 0x0f151c,
-  roughness: 0.05,
-  metalness: 0.95
-});
-const lightGlowMat = new THREE.MeshStandardMaterial({
-  color: 0xffffff,
-  emissive: 0xffffff,
-  emissiveIntensity: 0.8
-});
-const brakeGlowMat = new THREE.MeshStandardMaterial({
-  color: 0xff1e1e,
-  emissive: 0x880000,
-  emissiveIntensity: 0.4
-});
+const carBody = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.55, 4.4), carPaint);
+carBody.position.y = 0.55;
+carBody.castShadow = true;
+car.add(carBody);
 
-// Lower chassis
-const lowerBody = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.55, 4.5), carBodyMat);
-lowerBody.position.y = 0.5;
-lowerBody.castShadow = true;
-car.add(lowerBody);
+const carCabin = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.5, 2.2), glassMat);
+carCabin.position.set(0, 0.95, -0.2);
+carCabin.castShadow = true;
+car.add(carCabin);
 
-// Cabin
-const roof = new THREE.Mesh(new THREE.BoxGeometry(1.68, 0.55, 2.3), glassMat);
-roof.position.set(0, 0.98, -0.2);
-roof.castShadow = true;
-car.add(roof);
-
-// Front Bumper / Splitter
-const splitter = new THREE.Mesh(new THREE.BoxGeometry(2.12, 0.2, 0.4), blackPlasticMat);
-splitter.position.set(0, 0.28, 2.2);
-car.add(splitter);
-
-// Headlights & Tail Lights
-const hl1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.15, 0.1), lightGlowMat);
-hl1.position.set(-0.7, 0.58, 2.26);
-const hl2 = hl1.clone();
-hl2.position.x = 0.7;
-car.add(hl1, hl2);
-
-const tl1 = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.14, 0.1), brakeGlowMat);
-tl1.position.set(-0.7, 0.6, -2.26);
-const tl2 = tl1.clone();
-tl2.position.x = 0.7;
-car.add(tl1, tl2);
-
-// Wheels with silver rims
-const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.38, 20);
+const carWheels = [];
+const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.38, 18);
 wheelGeo.rotateZ(Math.PI / 2);
-const rimGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.4, 12);
-rimGeo.rotateZ(Math.PI / 2);
-const rimMat = new THREE.MeshStandardMaterial({ color: 0xd0d0d0, metalness: 0.9, roughness: 0.2 });
-
-const wheels = [];
-const wheelPositions = [
-  [-1.1, 0.42, 1.4],
-  [1.1, 0.42, 1.4],
-  [-1.1, 0.42, -1.4],
-  [1.1, 0.42, -1.4]
-];
-
-wheelPositions.forEach(([x, y, z]) => {
-  const wGroup = new THREE.Group();
-  const tire = new THREE.Mesh(wheelGeo, blackPlasticMat);
-  tire.castShadow = true;
-  wGroup.add(tire);
-  const rim = new THREE.Mesh(rimGeo, rimMat);
-  wGroup.add(rim);
-
-  wGroup.position.set(x, y, z);
-  car.add(wGroup);
-  wheels.push(wGroup);
+[
+  [-1.05, 0.42, 1.35],
+  [1.05, 0.42, 1.35],
+  [-1.05, 0.42, -1.35],
+  [1.05, 0.42, -1.35]
+].forEach(([x, y, z]) => {
+  const w = new THREE.Mesh(wheelGeo, blackMat);
+  w.position.set(x, y, z);
+  w.castShadow = true;
+  car.add(w);
+  carWheels.push(w);
 });
 
-// Start car positioned smoothly on the road
-const startPoint = getTrackCenter(0.02);
-car.position.set(startPoint.x, startPoint.y + 0.5, startPoint.z);
-scene.add(car);
+// Dual Ray Traced Headlight Torches for Car
+function createTorch(offsetX) {
+  const light = new THREE.SpotLight(0xfff5d6, 3.2, 70, Math.PI / 7, 0.35, 1.2);
+  light.position.set(offsetX, 0.6, 2.2);
+  light.target.position.set(offsetX, 0.2, 35);
+  light.castShadow = true;
+  car.add(light);
+  car.add(light.target);
+  return light;
+}
+createTorch(-0.7);
+createTorch(0.7);
 
-// --- CONTROLS & PHYSICAL STATE ---
-const keys = { gas: false, brake: false, left: false, right: false };
+// --- VEHICLE 2: WHITE SUPERBIKE ---
+const bike = new THREE.Group();
+const whitePaint = new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.15, metalness: 0.7 });
+const chromeMat = new THREE.MeshStandardMaterial({ color: 0xdde2e8, roughness: 0.1, metalness: 0.9 });
+
+// Frame & Fuel Tank
+const frame = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 1.8), whitePaint);
+frame.position.y = 0.85;
+frame.castShadow = true;
+bike.add(frame);
+
+const seat = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.15, 0.7), blackMat);
+seat.position.set(0, 1.05, -0.35);
+bike.add(seat);
+
+// Handlebars
+const handlebar = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.9, 8), chromeMat);
+handlebar.rotateZ(Math.PI / 2);
+handlebar.position.set(0, 1.2, 0.6);
+bike.add(handlebar);
+
+// Bike Wheels (Thin)
+const bikeWheelGeo = new THREE.CylinderGeometry(0.44, 0.44, 0.18, 20);
+bikeWheelGeo.rotateZ(Math.PI / 2);
+const frontBikeWheel = new THREE.Mesh(bikeWheelGeo, blackMat);
+frontBikeWheel.position.set(0, 0.44, 1.05);
+frontBikeWheel.castShadow = true;
+bike.add(frontBikeWheel);
+
+const rearBikeWheel = new THREE.Mesh(bikeWheelGeo, blackMat);
+rearBikeWheel.position.set(0, 0.44, -1.05);
+rearBikeWheel.castShadow = true;
+bike.add(rearBikeWheel);
+
+// Single Powerful High-Beam Torch for Bike
+const bikeTorch = new THREE.SpotLight(0xfff7e6, 3.8, 85, Math.PI / 6.5, 0.35, 1.2);
+bikeTorch.position.set(0, 0.9, 1.1);
+bikeTorch.target.position.set(0, 0.2, 40);
+bikeTorch.castShadow = true;
+bike.add(bikeTorch);
+bike.add(bikeTorch.target);
+
+// Scene Vehicle Registration
+scene.add(car);
+scene.add(bike);
+bike.visible = false; // start with car
+
+let currentVehicle = car;
+let isBike = false;
+
+// Position at start of the road
+const startPos = getTrackPos(0.01);
+car.position.set(startPos.x, 0, startPos.z);
+bike.position.set(startPos.x, 0, startPos.z);
+
+// --- VEHICLE SWITCHING LOGIC ---
+const vehNameUI = document.getElementById("vehName");
+function switchVehicle() {
+  isBike = !isBike;
+  if (isBike) {
+    bike.position.copy(car.position);
+    bike.rotation.copy(car.rotation);
+    car.visible = false;
+    bike.visible = true;
+    currentVehicle = bike;
+    vehNameUI.innerText = "WHITE SUPERBIKE";
+    vehNameUI.style.color = "#ffffff";
+  } else {
+    car.position.copy(bike.position);
+    car.rotation.copy(bike.rotation);
+    bike.visible = false;
+    car.visible = true;
+    currentVehicle = car;
+    vehNameUI.innerText = "RED CAR";
+    vehNameUI.style.color = "#ff4d4d";
+  }
+}
+document.getElementById("btn-switch").addEventListener("click", switchVehicle);
+
+// --- INPUTS & CONTROLS ---
+const inputs = { gas: false, brake: false, left: false, right: false };
 
 window.addEventListener("keydown", (e) => {
-  if (e.key === "w" || e.key === "ArrowUp") keys.gas = true;
-  if (e.key === "s" || e.key === "ArrowDown") keys.brake = true;
-  if (e.key === "a" || e.key === "ArrowLeft") keys.left = true;
-  if (e.key === "d" || e.key === "ArrowRight") keys.right = true;
+  if (e.key === "w" || e.key === "ArrowUp") inputs.gas = true;
+  if (e.key === "s" || e.key === "ArrowDown") inputs.brake = true;
+  if (e.key === "a" || e.key === "ArrowLeft") inputs.left = true;
+  if (e.key === "d" || e.key === "ArrowRight") inputs.right = true;
+  if (e.key === "v" || e.key === "V") switchVehicle();
 });
 window.addEventListener("keyup", (e) => {
-  if (e.key === "w" || e.key === "ArrowUp") keys.gas = false;
-  if (e.key === "s" || e.key === "ArrowDown") keys.brake = false;
-  if (e.key === "a" || e.key === "ArrowLeft") keys.left = false;
-  if (e.key === "d" || e.key === "ArrowRight") keys.right = false;
+  if (e.key === "w" || e.key === "ArrowUp") inputs.gas = false;
+  if (e.key === "s" || e.key === "ArrowDown") inputs.brake = false;
+  if (e.key === "a" || e.key === "ArrowLeft") inputs.left = false;
+  if (e.key === "d" || e.key === "ArrowRight") inputs.right = false;
 });
 
-function bindButton(id, stateKey) {
+function bindBtn(id, key) {
   const el = document.getElementById(id);
-  const press = (e) => { e.preventDefault(); keys[stateKey] = true; el.classList.add("pressed"); };
-  const release = (e) => { e.preventDefault(); keys[stateKey] = false; el.classList.remove("pressed"); };
-  el.addEventListener("touchstart", press, { passive: false });
-  el.addEventListener("touchend", release, { passive: false });
-  el.addEventListener("mousedown", press);
-  el.addEventListener("mouseup", release);
-  el.addEventListener("mouseleave", release);
+  const on = (e) => { e.preventDefault(); inputs[key] = true; el.classList.add("pressed"); };
+  const off = (e) => { e.preventDefault(); inputs[key] = false; el.classList.remove("pressed"); };
+  el.addEventListener("touchstart", on, { passive: false });
+  el.addEventListener("touchend", off, { passive: false });
+  el.addEventListener("mousedown", on);
+  el.addEventListener("mouseup", off);
+  el.addEventListener("mouseleave", off);
 }
-bindButton("btn-gas", "gas");
-bindButton("btn-brake", "brake");
-bindButton("btn-left", "left");
-bindButton("btn-right", "right");
+bindBtn("btn-gas", "gas");
+bindBtn("btn-brake", "brake");
+bindBtn("btn-left", "left");
+bindBtn("btn-right", "right");
 
-// Physics variables
+// --- REALISTIC SPEED & PHYSICS ENGINE ---
 let speed = 0;
-let carHeading = Math.atan2(roadPts[1].z - roadPts[0].z, roadPts[1].x - roadPts[0].x) - Math.PI / 2;
-let steerVal = 0;
-let velocityY = 0;
+let heading = Math.atan2(trackPoints[1].z - trackPoints[0].z, trackPoints[1].x - trackPoints[0].x) - Math.PI / 2;
+let steerAngle = 0;
 
 const speedUI = document.getElementById("speedVal");
 const gearUI = document.getElementById("gearVal");
-const surfaceUI = document.getElementById("surfaceVal");
 
-// --- MAIN LOOP ---
 function animate() {
   requestAnimationFrame(animate);
 
-  // Surface detection (Road vs Grass)
-  const angle = Math.atan2(car.position.z, car.position.x);
-  let t = angle / (Math.PI * 2);
-  if (t < 0) t += 1.0;
-  const nearestRoad = getTrackCenter(t);
-  const distFromRoad = Math.hypot(car.position.x - nearestRoad.x, car.position.z - nearestRoad.z);
-  const onGrass = distFromRoad > ROAD_WIDTH / 2;
+  // Controlled, realistic driving physics
+  const maxForwardSpeed = isBike ? 1.45 : 1.25; // Balanced, non-crazy speed
+  const accelRate = isBike ? 0.014 : 0.011;
+  const brakeRate = 0.024;
+  const coastDrag = 0.991;
 
-  surfaceUI.innerText = onGrass ? "OFF-ROAD / GRASS" : "TARMAC";
-  surfaceUI.style.color = onGrass ? "#80e27e" : "#ffd166";
-
-  // Dynamic friction based on road contact
-  const maxSpd = onGrass ? 0.9 : 1.95;
-  const accelRate = onGrass ? 0.012 : 0.024;
-  const dragRate = onGrass ? 0.94 : 0.988;
-
-  // Power & Brakes
-  if (keys.gas) {
+  if (inputs.gas) {
     speed += accelRate;
-    brakeGlowMat.emissiveIntensity = 0.3;
-  } else if (keys.brake) {
-    speed -= 0.045;
-    brakeGlowMat.emissiveIntensity = 2.0; // brake lights glow bright
+  } else if (inputs.brake) {
+    speed -= brakeRate;
   } else {
-    speed *= dragRate;
-    brakeGlowMat.emissiveIntensity = 0.3;
+    speed *= coastDrag;
   }
 
-  speed = Math.max(-0.45, Math.min(maxSpd, speed));
+  // Reverse limit & forward clamp
+  speed = Math.max(-0.35, Math.min(maxForwardSpeed, speed));
 
-  // Steering
-  const targetSteer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
-  steerVal += (targetSteer * 0.038 - steerVal) * 0.18;
+  // Steering kinematics
+  const steerTarget = (inputs.left ? 1 : 0) - (inputs.right ? 1 : 0);
+  const steerSpeed = isBike ? 0.045 : 0.035;
+  steerAngle += (steerTarget * steerSpeed - steerAngle) * 0.15;
 
   if (Math.abs(speed) > 0.005) {
     const dir = speed >= 0 ? 1 : -1;
-    carHeading += steerVal * dir * (speed / maxSpd);
+    heading += steerAngle * dir * (speed / maxForwardSpeed);
   }
 
-  // Turn front wheels visually
-  wheels[0].rotation.y = steerVal * 8;
-  wheels[1].rotation.y = steerVal * 8;
+  // Visual wheel turning / motorcycle banking (lean into corners)
+  if (isBike) {
+    frontBikeWheel.rotation.y = steerAngle * 4;
+    frontBikeWheel.rotation.x += speed * 0.7;
+    rearBikeWheel.rotation.x += speed * 0.7;
+    const bikeLean = -steerAngle * 1.8; // Motorcycles naturally lean
+    bike.rotation.set(0, heading, bikeLean);
+  } else {
+    carWheels[0].rotation.y = steerAngle * 6;
+    carWheels[1].rotation.y = steerAngle * 6;
+    carWheels.forEach(w => w.rotation.x += speed * 0.5);
+    const carRoll = steerAngle * 0.35;
+    car.rotation.set(0, heading, carRoll);
+  }
 
-  // Wheel roll
-  wheels.forEach(w => {
-    w.children[0].rotation.x += speed * 0.5;
-  });
+  // Position updates along the pure flat surface (Y = 0)
+  currentVehicle.position.x += Math.sin(heading) * speed;
+  currentVehicle.position.z += Math.cos(heading) * speed;
+  currentVehicle.position.y = 0; // Completely anchored, zero sinking
 
-  // Calculate new position
-  car.position.x += Math.sin(carHeading) * speed;
-  car.position.z += Math.cos(carHeading) * speed;
-
-  // Raycast/Ground Elevation Clamping
-  const groundElevation = getIslandElevation(car.position.x, car.position.z);
-  const targetY = groundElevation + 0.15;
-
-  // Smooth suspension snap
-  car.position.y += (targetY - car.position.y) * 0.35;
-
-  // Sample slope ahead for pitch calculation
-  const aheadX = car.position.x + Math.sin(carHeading) * 2;
-  const aheadZ = car.position.z + Math.cos(carHeading) * 2;
-  const aheadElevation = getIslandElevation(aheadX, aheadZ);
-  const pitch = (aheadElevation - groundElevation) * 0.35;
-  const roll = steerVal * speed * 0.45;
-
-  car.rotation.set(-pitch, carHeading, roll);
-
-  // Smooth third-person chase camera
-  const camOffset = new THREE.Vector3(
-    car.position.x - Math.sin(carHeading) * 11.5,
-    car.position.y + 4.6,
-    car.position.z - Math.cos(carHeading) * 11.5
+  // Chase Camera smoothly following current vehicle
+  const camDist = isBike ? 8.5 : 10.5;
+  const camHeight = isBike ? 3.4 : 4.0;
+  const targetCamPos = new THREE.Vector3(
+    currentVehicle.position.x - Math.sin(heading) * camDist,
+    currentVehicle.position.y + camHeight,
+    currentVehicle.position.z - Math.cos(heading) * camDist
   );
-  camera.position.lerp(camOffset, 0.12);
+  camera.position.lerp(targetCamPos, 0.12);
   camera.lookAt(
-    car.position.x,
-    car.position.y + 1.2,
-    car.position.z + Math.cos(carHeading) * 4
+    currentVehicle.position.x,
+    currentVehicle.position.y + 1.2,
+    currentVehicle.position.z + Math.cos(heading) * 4
   );
 
-  // Sunlight tracks the car
-  sun.position.set(car.position.x + 180, car.position.y + 350, car.position.z - 140);
-  sun.target = car;
-
-  // HUD
-  const kmh = Math.round(Math.abs(speed) * 105);
+  // HUD Updates
+  const kmh = Math.round(Math.abs(speed) * 95);
   speedUI.innerText = kmh;
-  gearUI.innerText = speed < -0.02 ? "R" : speed > 0.05 ? "D" : "N";
+  gearUI.innerText = speed < -0.02 ? "R" : speed > 0.04 ? "D" : "N";
 
   renderer.render(scene, camera);
 }
 
 animate();
 
-// Resize
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
